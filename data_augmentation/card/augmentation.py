@@ -44,8 +44,8 @@ def augment_image(image):
     augmentations = []
 
     # Rotation
-    for angle in [angle for angle in range(-90, 90, 15)]:
-        augmentations.append(rotate_image(image, angle))
+    # for angle in [angle for angle in range(-90, 90, 15)]:
+    #     augmentations.append(rotate_image(image, angle))
     
     # Flip
     augmentations.append(cv2.flip(image, 1))  # horizontal
