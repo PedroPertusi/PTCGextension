@@ -99,12 +99,18 @@ labels = reformat_labels(labels, blank_table)
 
 def draw_cards_in_table(blank_table, labels, cards=cards):
     """
-    Draw cards in the table image based on the labels.
+    Draw cards in the table image based on the labels, all resized to the same average size.
     Returns:
         numpy.ndarray: Table image with drawn cards.
     """
     table = blank_table.copy()
     random_labels = random.sample(labels, random.randint(10, 15))
+
+    # Calculate average box size
+    total_w = sum(x2 - x1 for x1, y1, x2, y2 in random_labels)
+    total_h = sum(y2 - y1 for x1, y1, x2, y2 in random_labels)
+    avg_w = int(total_w / len(random_labels))
+    avg_h = int(total_h / len(random_labels))
 
     for label in random_labels:
         x1, y1, x2, y2 = label
@@ -112,11 +118,9 @@ def draw_cards_in_table(blank_table, labels, cards=cards):
         card_image = load_image(card_image_path)
 
         card_h, card_w = card_image.shape[:2]
-        box_w = x2 - x1
-        box_h = y2 - y1
 
-        # Scale image to fit inside the box (keeping aspect ratio)
-        scale = min(box_w / card_w, box_h / card_h)
+        # Scale image to average size (keeping aspect ratio)
+        scale = min(avg_w / card_w, avg_h / card_h)
         new_w = int(card_w * scale)
         new_h = int(card_h * scale)
 
@@ -152,9 +156,15 @@ def draw_cards_in_table(blank_table, labels, cards=cards):
             borderValue=(0, 0, 0, 0)  # Transparent
         )
 
-        # Compute top-left corner to center rotated image
+        # Compute top-left corner to center rotated image in label box
+        box_w = x2 - x1
+        box_h = y2 - y1
         offset_x = x1 + (box_w - bound_w) // 2
         offset_y = y1 + (box_h - bound_h) // 2
+
+        # Clip offsets to image bounds
+        if offset_x < 0 or offset_y < 0 or offset_x + bound_w > table.shape[1] or offset_y + bound_h > table.shape[0]:
+            continue  # Skip if rotated card does not fit
 
         # Define region of interest on table
         roi = table[offset_y:offset_y+bound_h, offset_x:offset_x+bound_w]
@@ -167,8 +177,8 @@ def draw_cards_in_table(blank_table, labels, cards=cards):
         # Update table with blended ROI
         table[offset_y:offset_y+bound_h, offset_x:offset_x+bound_w] = roi
 
-
     return table
+
 
 plt.imshow(cv2.cvtColor(draw_cards_in_table(blank_table, labels), cv2.COLOR_BGR2RGB))
 plt.axis('off')
