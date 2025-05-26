@@ -9,3 +9,4 @@ cards.zip
 *.zip
 cropped_images
 output
+*.pth
