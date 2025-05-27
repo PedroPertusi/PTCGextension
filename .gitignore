@@ -10,3 +10,4 @@ cards.zip
 cropped_images
 output
 *.pth
+/input_example
