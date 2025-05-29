@@ -90,14 +90,25 @@ def reformat_labels(labels, blank_table):
         reformatted_labels.append((x1, y1, x2, y2))
     return reformatted_labels
 
-labels = load_table_dataset_labels()
-cards = load_card_dataset()
-# read table image in path : input_example\baseline_table.jpeg
-blank_table_path = 'input_example/baseline_table.jpeg'
-blank_table = load_image(blank_table_path)
-labels = reformat_labels(labels, blank_table)
+def save_reformatted_labels(reformatted_labels, image_shape, output_path, class_id=0):
+    """
+    Save reformatted labels back into YOLO format.
+    Args:
+        reformatted_labels (list): List of (x1, y1, x2, y2) pixel coords.
+        image_shape (tuple): Shape of the image (height, width).
+        output_path (str): File path to save the txt file.
+        class_id (int): Class ID to write (default: 0).
+    """
+    h, w = image_shape[:2]
+    with open(output_path, "w") as f:
+        for x1, y1, x2, y2 in reformatted_labels:
+            x_center = ((x1 + x2) / 2) / w
+            y_center = ((y1 + y2) / 2) / h
+            box_width = (x2 - x1) / w
+            box_height = (y2 - y1) / h
+            f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {box_width:.6f} {box_height:.6f}\n")
 
-def draw_cards_in_table(blank_table, labels, cards=cards):
+def draw_cards_in_table(blank_table, labels, cards):
     """
     Draw cards in the table image based on the labels, all resized to the same average size.
     Returns:
@@ -109,8 +120,8 @@ def draw_cards_in_table(blank_table, labels, cards=cards):
     # Calculate average box size
     total_w = sum(x2 - x1 for x1, y1, x2, y2 in random_labels)
     total_h = sum(y2 - y1 for x1, y1, x2, y2 in random_labels)
-    avg_w = int(total_w / len(random_labels))
-    avg_h = int(total_h / len(random_labels))
+    avg_w = total_w / len(random_labels) 
+    avg_h = total_h / len(random_labels) 
 
     for label in random_labels:
         x1, y1, x2, y2 = label
@@ -177,9 +188,28 @@ def draw_cards_in_table(blank_table, labels, cards=cards):
         # Update table with blended ROI
         table[offset_y:offset_y+bound_h, offset_x:offset_x+bound_w] = roi
 
-    return table
+    return table, random_labels
 
+def main():
+    labels = load_table_dataset_labels()
+    cards = load_card_dataset()
+    blank_table_path = 'table.png'
+    blank_table = load_image(blank_table_path)
+    labels = reformat_labels(labels, blank_table)
 
-plt.imshow(cv2.cvtColor(draw_cards_in_table(blank_table, labels), cv2.COLOR_BGR2RGB))
-plt.axis('off')
-plt.show()
+    table_with_cards, used_labels = draw_cards_in_table(blank_table, labels, cards)
+
+    for x1, y1, x2, y2 in used_labels:
+        cv2.rectangle(table_with_cards, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    # Save only the used labels in YOLO format
+    save_reformatted_labels(used_labels, blank_table.shape, "used_labels.txt")
+
+    image = cv2.cvtColor(table_with_cards, cv2.COLOR_BGR2RGB)
+    plt.imshow(image)
+    plt.axis('off')
+    plt.show()
+    return image
+
+if __name__ == "__main__": 
+    main()

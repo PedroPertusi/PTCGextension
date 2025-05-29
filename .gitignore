@@ -8,3 +8,8 @@
 cards.zip
 *.zip
 predict
+
+/data_augmentation/*/cards
+/data_augmentation/*/images
+/data_augmentation/*/labels
+/data_augmentation/all_cards
