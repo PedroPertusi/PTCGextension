@@ -11,3 +11,6 @@ cropped_images
 output
 *.pth
 /input_example
+/runs
+*.pt
+custom.yaml
