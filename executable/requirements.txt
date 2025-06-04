@@ -1,3 +1,5 @@
 PyQt5>=5.15
 opencv-python
 mss
+pygetwindow
+pyautogui

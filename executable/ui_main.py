@@ -1,71 +1,79 @@
-# ui_main.py
-
-from PyQt5.QtWidgets import QLabel, QMainWindow, QVBoxLayout, QWidget, QDialog, QHBoxLayout
-from PyQt5.QtCore import QTimer, QRect
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor
-import cv2
-from screen_capture import get_video_frame
+from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtGui import QPainter, QColor, QImage
+from screen_capture import get_video_frame, set_capture_region
 from detector_mock import detect_cards_mock
-
-class ZoomDialog(QDialog):
-    def __init__(self, card_path):
-        super().__init__()
-        self.setWindowTitle("Card Viewer")
-        layout = QHBoxLayout()
-        label = QLabel()
-        pixmap = QPixmap(card_path).scaled(300, 450)
-        label.setPixmap(pixmap)
-        layout.addWidget(label)
-        self.setLayout(layout)
+from overlay_widget import ZoomDialog
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, capture_region):
         super().__init__()
-        self.setWindowTitle("Pokémon Card Inspector (Mock)")
-        self.setGeometry(100, 100, 1280, 720)
+        self.setWindowTitle("PTCG Overlay")
+        self.capture_region = capture_region
+        set_capture_region(capture_region)
 
-        self.label = QLabel()
-        layout = QVBoxLayout()
-        layout.addWidget(self.label)
+        self.setGeometry(
+            capture_region["left"],
+            capture_region["top"],
+            capture_region["width"],
+            capture_region["height"]
+        )
 
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+
+        self.frame = None
+        self.boxes = []
+        self.frame_count = 0
 
         self.timer = QTimer()
-        self.timer.timeout.connect(self.update_frame)
+        self.timer.timeout.connect(self.refresh_data)
         self.timer.start(1000 // 10)  # ~10 FPS
 
-        self.boxes = []
+    def refresh_data(self):
+        refresh_boxes = self.frame_count % 50 == 0
 
-    def update_frame(self):
-        frame = get_video_frame()
-        if frame is None:
+        # Only hide the window if we're refreshing detections
+        was_visible = self.isVisible()
+        if refresh_boxes and was_visible:
+            self.setVisible(False)
+
+        self.frame = get_video_frame(hide_window=refresh_boxes)
+
+        if refresh_boxes and was_visible:
+            self.setVisible(True)
+
+        if self.frame is not None and refresh_boxes:
+            h, w, _ = self.frame.shape
+            self.boxes = detect_cards_mock(w, h)
+
+        self.frame_count += 1
+        self.update()
+
+    def paintEvent(self, event):
+        if self.frame is None:
             return
 
-        h, w, _ = frame.shape
-        self.boxes = detect_cards_mock(w, h)
+        h, w, _ = self.frame.shape
+        image = QImage(self.frame.data, w, h, 3 * w, QImage.Format_RGB888)
+        painter = QPainter(self)
+        painter.drawImage(0, 0, image)
 
-        qt_img = QImage(frame.data, w, h, 3 * w, QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(qt_img)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QColor(0, 255, 0, 180))
 
-        painter = QPainter(pixmap)
-        painter.setPen(QColor(0, 255, 0))
         for box in self.boxes:
-            x, y, bw, bh, name = box
+            x, y, bw, bh, _ = box
             painter.drawRect(x, y, bw, bh)
+
         painter.end()
 
-        self.label.setPixmap(pixmap)
-        self.label.mousePressEvent = self.on_click
-
-    def on_click(self, event):
+    def mousePressEvent(self, event):
         x_click = event.pos().x()
         y_click = event.pos().y()
 
         for box in self.boxes:
             x, y, w, h, name = box
             if x <= x_click <= x + w and y <= y_click <= y + h:
-                dialog = ZoomDialog(f"cards/{name}.jpg")
+                dialog = ZoomDialog()
                 dialog.exec_()
                 break
