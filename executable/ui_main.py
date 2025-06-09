@@ -32,16 +32,10 @@ class MainWindow(QMainWindow):
     def refresh_data(self):
         refresh_boxes = self.frame_count % 50 == 0
 
-        # Only hide the window if we're refreshing detections
-        was_visible = self.isVisible()
-        if refresh_boxes and was_visible:
-            self.setVisible(False)
+        # Always capture the screen, don't hide the window anymore
+        self.frame = get_video_frame(hide_window=False)
 
-        self.frame = get_video_frame(hide_window=refresh_boxes)
-
-        if refresh_boxes and was_visible:
-            self.setVisible(True)
-
+        # Only update detections every 5 seconds
         if self.frame is not None and refresh_boxes:
             h, w, _ = self.frame.shape
             self.boxes = detect_cards_mock(w, h)
