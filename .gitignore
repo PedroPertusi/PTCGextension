@@ -9,3 +9,6 @@ cards.zip
 *.zip
 predict
 executable/__pycache__
+
+data_scripts/cards
+data_scripts/train_data*
