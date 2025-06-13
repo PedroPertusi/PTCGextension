@@ -1,0 +1,10 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource prefix="/cards">
+    <file>../cards/charizard.jpg</file>
+    <file>../cards/pikachu.jpg</file>
+    <file>../cards/mewtwo.jpg</file>
+    <file>../cards/bulbasaur.jpg</file>
+    <file>../cards/gengar.jpg</file>
+  </qresource>
+</RCC>
