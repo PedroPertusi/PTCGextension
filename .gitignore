@@ -9,7 +9,6 @@ cards.zip
 *.zip
 predict
 
-/data_augmentation/*/cards
-/data_augmentation/*/images
-/data_augmentation/*/labels
-/data_augmentation/all_cards
+/data_scripts/cards
+/data_scripts/train_data*
+/data_scripts/all_cards
