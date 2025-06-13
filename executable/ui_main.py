@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QPushButton, QLabel, QFileDialog, QVBoxLayout, QHBoxLayout,
-    QWidget, QSlider, QProgressBar, QInputDialog
+    QWidget, QSlider, QProgressBar, QInputDialog, QMessageBox
 )
 from PyQt5.QtCore import QTimer, Qt, QRect, QPoint, pyqtSignal, QObject, QThread
 from PyQt5.QtGui import QPixmap, QImage, QMouseEvent
@@ -62,7 +62,7 @@ class VideoProcessor(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("YOLO Card Detector")
+        self.setWindowTitle("Pokémon TCG Card Detector")
         self.resize(1280, 800)
 
         self.__init_video__()
@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
 
         self.detail_label = QLabel("Click on a card to see detail")
         self.detail_label.setMinimumSize(300, 400)
-        self.detail_label.setScaledContents(True)
+        #self.detail_label.setScaledContents(True)
 
         self.load_button = QPushButton("Process Video")
         self.load_button.clicked.connect(self.load_video)
@@ -94,6 +94,9 @@ class MainWindow(QMainWindow):
 
         self.play_pause_button = QPushButton("Pause")
         self.play_pause_button.clicked.connect(self.toggle_play)
+
+        self.help_button = QPushButton("Help")
+        self.help_button.clicked.connect(self.show_help_popup)
 
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setEnabled(False)
@@ -119,9 +122,16 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.play_pause_button)
         control_layout.addWidget(self.play_processed_button)
         control_layout.addWidget(self.slider)
+        control_layout.addWidget(self.help_button)
         
         display_layout.addWidget(self.video_label, 4)
-        display_layout.addWidget(self.detail_label, 1)
+        
+        right_side = QVBoxLayout()
+        right_side.addStretch()
+        right_side.addWidget(self.detail_label, alignment=Qt.AlignRight | Qt.AlignTop)
+        right_side.addStretch()
+
+        display_layout.addLayout(right_side, 1)
 
         layout.addLayout(control_layout)
         layout.addWidget(self.progress)
@@ -133,6 +143,8 @@ class MainWindow(QMainWindow):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.next_frame)
+
+        self.show_help_popup()
 
     def __init_video__(self):
         
@@ -370,11 +382,30 @@ class MainWindow(QMainWindow):
     def load_card_by_index(self, idx):
         card_path = f"./cards/sv1-{idx+1}/sv1-{idx+1}.png"
         if os.path.exists(card_path):
-            pixmap = QPixmap(card_path).scaled(self.detail_label.size(), Qt.KeepAspectRatio)
-            self.detail_label.setPixmap(pixmap)
+            pixmap = QPixmap(card_path)
+            scaled = pixmap.scaled(
+                self.detail_label.width(),
+                self.detail_label.height(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            self.detail_label.setPixmap(scaled)
         else:
             self.detail_label.setText(f"Card image not found for index {idx}")
 
+    def show_help_popup(self):
+        QMessageBox.information(
+            self,
+            "How to Use YOLO Card Detector",
+            "To process a video:\n"
+            "1. Click 'Process Video' and choose a video file.\n"
+            "2. Wait while it detects cards frame-by-frame.\n\n"
+            "To detect cards in an image:\n"
+            "Click 'Detect on Image' and choose an image file.\n\n"
+            "To view previous results:\n"
+            "Click 'Play Processed Video'.\n\n"
+            "Click on a card in the video/image to preview it on the right."
+        )
 
 class ClickableLabel(QLabel):
     clicked = pyqtSignal(QPoint)
