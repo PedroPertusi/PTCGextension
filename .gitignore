@@ -12,7 +12,7 @@ output
 *.pth
 /input_example
 /runs
-*.pt
+
 custom.yaml
 /executable/env
 /executable/__pycache__
