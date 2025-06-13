@@ -144,8 +144,6 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.next_frame)
 
-        self.show_help_popup()
-
     def __init_video__(self):
         
         self.cap = None
