@@ -12,9 +12,14 @@ output
 *.pth
 /input_example
 /runs
-*.pt
+
 custom.yaml
 /executable/env
 /executable/__pycache__
 
 /predict
+/results
+
+*.mp4
+*.png
+*.pt
