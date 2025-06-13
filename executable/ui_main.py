@@ -65,11 +65,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("YOLO Card Detector")
         self.resize(1280, 800)
 
-        self.current_frame_index = 0
-        self.current_frame_pos = 0
-        self.fps = 30
-        self.cap = None
-        self.detection_results = []
+        self.__init_video__()
 
         self.static_image_mode = False
         self.static_detections = []
@@ -77,6 +73,7 @@ class MainWindow(QMainWindow):
         os.makedirs("results", exist_ok=True)
 
         # UI Elements
+
         self.video_label = ClickableLabel()
         self.video_label.setScaledContents(True)
         self.video_label.clicked.connect(self.on_frame_clicked)
@@ -95,7 +92,6 @@ class MainWindow(QMainWindow):
         self.play_processed_button = QPushButton("Play Processed Video")
         self.play_processed_button.clicked.connect(self.select_processed_video)
 
-
         self.play_pause_button = QPushButton("Pause")
         self.play_pause_button.clicked.connect(self.toggle_play)
 
@@ -105,6 +101,14 @@ class MainWindow(QMainWindow):
 
         self.progress = QProgressBar()
         self.progress.setValue(0)
+
+        # Ui base visibility
+        self.slider.setVisible(False)
+        self.play_pause_button.setVisible(False)
+        self.progress.setVisible(False)
+
+
+        # Layout
 
         layout = QVBoxLayout()
         control_layout = QHBoxLayout()
@@ -130,12 +134,24 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.next_frame)
 
+    def __init_video__(self):
+        
+        self.cap = None
+        self.detection_results = []
+        self.frame_count = 0
+        self.current_frame_pos = 0
+        self.fps = 30
+        # Ensure results directory exists
+        os.makedirs("results", exist_ok=True)
+
     def next_available_index(self):
         existing = [f for f in os.listdir("results") if f.startswith("output_") and f.endswith(".mp4")]
         indices = [int(f.split('_')[1].split('.')[0]) for f in existing if f.split('_')[1].split('.')[0].isdigit()]
         return max(indices + [0]) + 1
 
     def load_video(self):
+        self.progress.setVisible(True)
+        self.static_image_mode = False
         video_path, _ = QFileDialog.getOpenFileName(self, "Select video", "", "Videos (*.mp4 *.avi *.mov)")
         if not video_path:
             return
@@ -144,6 +160,7 @@ class MainWindow(QMainWindow):
         if not cap.isOpened():
             self.video_label.setText("Failed to load video.")
             return
+        
 
         self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
@@ -158,6 +175,7 @@ class MainWindow(QMainWindow):
         result_path = os.path.join("results", f"results_{index}.txt")
 
         self.processor_thread = QThread()
+        self.static_image_mode = False
         self.processor = VideoProcessor(video_path, output_path, result_path, self.fps)
         self.processor.moveToThread(self.processor_thread)
 
@@ -170,6 +188,11 @@ class MainWindow(QMainWindow):
         self.processor_thread.start()
 
     def select_processed_video(self):
+        self.__init_video__()
+        self.static_image_mode = False
+        self.detail_label.setText("Click on a card to see detail")
+        self.detail_label.setPixmap(QPixmap())
+        
         files = sorted([
             f for f in os.listdir("results")
             if f.startswith("output_") and f.endswith(".mp4")
@@ -200,12 +223,40 @@ class MainWindow(QMainWindow):
         self.slider.setMaximum(self.frame_count - 1)
         self.slider.setEnabled(True)
         self.current_frame_pos = 0
+        self.slider.setVisible(True)
+        self.play_pause_button.setVisible(True)
         self.timer.start(1000 // self.fps)
         self.play_pause_button.setText("Pause")
 
     def on_processing_finished(self):
         self.progress.setValue(100)
+        self.static_image_mode = False
+        # Find the latest processed file
+        index = self.next_available_index() - 1  # Because we incremented before
+        output_video = os.path.join("results", f"output_{index}.mp4")
+        result_file = os.path.join("results", f"results_{index}.txt")
+
+        self.cap = detector.load_detection_video(output_video)
+        self.detection_results = detector.load_detection_results(result_file)
+
+        if not self.cap or not self.cap.isOpened():
+            self.video_label.setText("Failed to load processed video.")
+            return
+
+        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 30
+        self.slider.setMaximum(self.frame_count - 1)
+        self.slider.setEnabled(True)
+        self.current_frame_pos = 0
+
+        # Show controls and start video
+        self.slider.setVisible(True)
+        self.play_pause_button.setVisible(True)
+        self.timer.start(1000 // self.fps)
         self.play_pause_button.setText("Pause")
+        # remove progress bar
+        self.progress.setValue(0)
+        self.progress.setVisible(False)
 
     def next_frame(self):
         if self.cap is None:
@@ -245,14 +296,12 @@ class MainWindow(QMainWindow):
         if self.cap:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
             self.current_frame_pos = pos
-
-    def display_random_card(self):
-        card_path = detector.get_random_card_image_path("./cards")
-        if card_path:
-            pixmap = QPixmap(card_path).scaled(self.detail_label.size(), Qt.KeepAspectRatio)
-            self.detail_label.setPixmap(pixmap)
    
     def detect_on_image(self):
+        self.static_image_mode = True
+        self.__init_video__()
+        self.detail_label.setText("Click on a card to see detail")
+        self.detail_label.setPixmap(QPixmap())
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Images (*.png *.jpg *.jpeg *.bmp)")
         if not file_path:
             return
