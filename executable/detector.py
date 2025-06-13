@@ -4,10 +4,7 @@ import random
 from ultralytics import YOLO
 
 # Load the actual YOLO model
-model = YOLO("my_model/my_model.pt")
-
-# Label list based on your model training classes
-CARD_NAMES = ["charizard", "pikachu", "mewtwo", "bulbasaur", "gengar"]
+model = YOLO("my_model/best.pt")
 
 def load_yolo_detections(txt_path, frame_width, frame_height):
     boxes = []
@@ -26,8 +23,8 @@ def load_yolo_detections(txt_path, frame_width, frame_height):
             y = int(y_center - height / 2)
             w = int(width)
             h = int(height)
-            card_name = CARD_NAMES[class_id] if 0 <= class_id < len(CARD_NAMES) else f"class_{class_id}"
-            boxes.append((card_name, x, y, w, h))
+
+            boxes.append((class_id, x, y, w, h))
     return boxes
 
 def load_detection_video(video_path):
@@ -61,8 +58,7 @@ def detect_on_frame(frame, return_boxes=False):
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             w = x2 - x1
             h = y2 - y1
-            name = CARD_NAMES[cls_id] if 0 <= cls_id < len(CARD_NAMES) else f"class_{cls_id}"
-            boxes.append((name, x1, y1, w, h))
+            boxes.append((cls_id, x1, y1, w, h))
 
     image = draw_detections(frame.copy(), boxes)
     if return_boxes:
@@ -70,9 +66,9 @@ def detect_on_frame(frame, return_boxes=False):
     return image
 
 def draw_detections(image, boxes):
-    for (name, x, y, w, h) in boxes:
+    for (cls_id, x, y, w, h) in boxes:
         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(image, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        cv2.putText(image, str(cls_id), (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     return image
 
 def preprocess_video(video_path):
@@ -106,3 +102,52 @@ def get_random_card_image_path(cards_root="./cards"):
     selected_image = random.choice(images)
     print(f"Selected card image: {selected_image} from folder: {folder_path}")
     return os.path.join(folder_path, selected_image)
+
+def detect_on_video_frame(video_path, frame_index):
+    """
+    Loads a specific frame from the video and performs detection on it.
+
+    Returns:
+        image_with_detections (np.array),
+        boxes (List[Tuple[name, x, y, w, h]])
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Failed to open video: {video_path}")
+        return None, []
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if frame_index >= total_frames or frame_index < 0:
+        print(f"Invalid frame index {frame_index} (max: {total_frames - 1})")
+        cap.release()
+        return None, []
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+    ret, frame = cap.read()
+    cap.release()
+
+    if not ret:
+        print(f"Failed to read frame at index {frame_index}")
+        return None, []
+
+    return detect_on_frame(frame, return_boxes=True)
+
+
+def detect_on_image(image_path):
+    """
+    Loads an image from disk and performs detection on it.
+
+    Returns:
+        image_with_detections (np.array),
+        boxes (List[Tuple[name, x, y, w, h]])
+    """
+    if not os.path.exists(image_path):
+        print(f"Image not found: {image_path}")
+        return None, []
+
+    frame = cv2.imread(image_path)
+    if frame is None:
+        print(f"Failed to read image: {image_path}")
+        return None, []
+
+    return detect_on_frame(frame, return_boxes=True)

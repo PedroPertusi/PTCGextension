@@ -1,42 +1,100 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QPushButton, QLabel, QFileDialog, QVBoxLayout, QHBoxLayout,
-    QWidget, QSlider
+    QWidget, QSlider, QProgressBar, QInputDialog
 )
-from PyQt5.QtCore import QTimer, Qt, QRect, QPoint, pyqtSignal
+from PyQt5.QtCore import QTimer, Qt, QRect, QPoint, pyqtSignal, QObject, QThread
 from PyQt5.QtGui import QPixmap, QImage, QMouseEvent
 import cv2
 import detector
 import random
 import os
 
+class VideoProcessor(QObject):
+    frame_ready = pyqtSignal(QImage)
+    finished = pyqtSignal()
+    update_slider = pyqtSignal(int)
+    update_progress = pyqtSignal(int)
+
+    def __init__(self, video_path, output_path, result_path, fps):
+        super().__init__()
+        self.video_path = video_path
+        self.output_path = output_path
+        self.result_path = result_path
+        self.fps = fps
+
+    def run(self):
+        cap = cv2.VideoCapture(self.video_path)
+        if not cap.isOpened():
+            self.finished.emit()
+            return
+
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(self.output_path, fourcc, self.fps, (width, height))
+
+        with open(self.result_path, 'w') as f:
+            frame_index = 0
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                frame_with_boxes, boxes = detector.detect_on_frame(frame, return_boxes=True)
+                out.write(frame_with_boxes)
+
+                # Save detection results
+                box_lines = [f"{int(name)}, {x},{y},{w},{h}" for (name, x, y, w, h) in boxes]
+
+                f.write(f"Frame {frame_index}: {len(boxes)} detections\n")
+                for line in box_lines:
+                    f.write(f"{line}\n")
+
+                self.update_progress.emit(int((frame_index / frame_count) * 100))
+                frame_index += 1
+
+        cap.release()
+        out.release()
+        self.finished.emit()
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("YOLO Card Detector")
         self.resize(1280, 800)
-        self.detection_file_path = "detection_results.txt"
-        self.output_video_path = "output_with_detections.mp4"
 
         self.current_frame_index = 0
+        self.current_frame_pos = 0
+        self.fps = 30
+        self.cap = None
+        self.detection_results = []
 
-        # Main video display
+        self.static_image_mode = False
+        self.static_detections = []
+
+        os.makedirs("results", exist_ok=True)
+
+        # UI Elements
         self.video_label = ClickableLabel()
         self.video_label.setScaledContents(True)
         self.video_label.clicked.connect(self.on_frame_clicked)
         self.video_label.setMaximumSize(960, 540)
 
-        # Detail view
         self.detail_label = QLabel("Click on a card to see detail")
         self.detail_label.setMinimumSize(300, 400)
         self.detail_label.setScaledContents(True)
 
-        # Video control buttons
-        self.load_button = QPushButton("Load Video")
+        self.load_button = QPushButton("Process Video")
         self.load_button.clicked.connect(self.load_video)
+    
+        self.detect_image_button = QPushButton("Detect on Image")
+        self.detect_image_button.clicked.connect(self.detect_on_image)
 
-        # Processed video button
         self.play_processed_button = QPushButton("Play Processed Video")
-        self.play_processed_button.clicked.connect(self.play_processed_video)
+        self.play_processed_button.clicked.connect(self.select_processed_video)
+
 
         self.play_pause_button = QPushButton("Pause")
         self.play_pause_button.clicked.connect(self.toggle_play)
@@ -45,44 +103,92 @@ class MainWindow(QMainWindow):
         self.slider.setEnabled(False)
         self.slider.sliderReleased.connect(self.seek_video)
 
-        # Layout setup
+        self.progress = QProgressBar()
+        self.progress.setValue(0)
+
         layout = QVBoxLayout()
         control_layout = QHBoxLayout()
         display_layout = QHBoxLayout()
 
         control_layout.addWidget(self.load_button)
+        control_layout.addWidget(self.detect_image_button)
         control_layout.addWidget(self.play_pause_button)
         control_layout.addWidget(self.play_processed_button)
         control_layout.addWidget(self.slider)
-
+        
         display_layout.addWidget(self.video_label, 4)
         display_layout.addWidget(self.detail_label, 1)
 
         layout.addLayout(control_layout)
+        layout.addWidget(self.progress)
         layout.addLayout(display_layout)
 
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        # Timer and state
         self.timer = QTimer()
         self.timer.timeout.connect(self.next_frame)
-        self.cap = None
-        self.frame_count = 0
-        self.current_frame_pos = 0
-        self.fps = 30
 
-        self.processed_video = None
-        self.detection_results = []
+    def next_available_index(self):
+        existing = [f for f in os.listdir("results") if f.startswith("output_") and f.endswith(".mp4")]
+        indices = [int(f.split('_')[1].split('.')[0]) for f in existing if f.split('_')[1].split('.')[0].isdigit()]
+        return max(indices + [0]) + 1
 
-    def play_processed_video(self):
-        if not os.path.exists(self.output_video_path) or not os.path.exists(self.detection_file_path):
-            self.video_label.setText("Processed video or detection file not found.")
+    def load_video(self):
+        video_path, _ = QFileDialog.getOpenFileName(self, "Select video", "", "Videos (*.mp4 *.avi *.mov)")
+        if not video_path:
             return
 
-        self.cap = detector.load_detection_video(self.output_video_path)
-        self.detection_results = detector.load_detection_results(self.detection_file_path)
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            self.video_label.setText("Failed to load video.")
+            return
+
+        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
+        cap.release()
+
+        self.slider.setMaximum(self.frame_count - 1)
+        self.slider.setEnabled(True)
+        self.current_frame_pos = 0
+
+        index = self.next_available_index()
+        output_path = os.path.join("results", f"output_{index}.mp4")
+        result_path = os.path.join("results", f"results_{index}.txt")
+
+        self.processor_thread = QThread()
+        self.processor = VideoProcessor(video_path, output_path, result_path, self.fps)
+        self.processor.moveToThread(self.processor_thread)
+
+        self.processor.update_slider.connect(self.slider.setValue)
+        self.processor.update_progress.connect(self.progress.setValue)
+        self.processor.finished.connect(self.processor_thread.quit)
+        self.processor.finished.connect(self.on_processing_finished)
+
+        self.processor_thread.started.connect(self.processor.run)
+        self.processor_thread.start()
+
+    def select_processed_video(self):
+        files = sorted([
+            f for f in os.listdir("results")
+            if f.startswith("output_") and f.endswith(".mp4")
+        ])
+
+        if not files:
+            self.video_label.setText("No processed videos found in 'results' folder.")
+            return
+
+        items = [f.replace("output_", "").replace(".mp4", "") for f in files]
+        item, ok = QInputDialog.getItem(self, "Choose Processed Video", "Video:", items, 0, False)
+        if not ok or not item:
+            return
+
+        output_video = os.path.join("results", f"output_{item}.mp4")
+        result_file = os.path.join("results", f"results_{item}.txt")
+
+        self.cap = detector.load_detection_video(output_video)
+        self.detection_results = detector.load_detection_results(result_file)
 
         if not self.cap or not self.cap.isOpened():
             self.video_label.setText("Failed to load processed video.")
@@ -93,62 +199,13 @@ class MainWindow(QMainWindow):
 
         self.slider.setMaximum(self.frame_count - 1)
         self.slider.setEnabled(True)
-
         self.current_frame_pos = 0
         self.timer.start(1000 // self.fps)
         self.play_pause_button.setText("Pause")
 
-
-    def load_video(self):
-        video_path, _ = QFileDialog.getOpenFileName(self, "Select video", "", "Videos (*.mp4 *.avi *.mov)")
-        if not video_path:
-            return
-
-        self.cap = cv2.VideoCapture(video_path)
-        if not self.cap.isOpened():
-            self.video_label.setText("Failed to load video.")
-            return
-
-        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 30
-        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        # Video writer for output
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(self.output_video_path, fourcc, self.fps, (width, height))
-
-        with open(self.detection_file_path, 'w') as f:
-            frame_index = 0
-            while True:
-                ret, frame = self.cap.read()
-                if not ret:
-                    break
-                
-                frame_with_boxes, boxes = detector.detect_on_frame(frame, return_boxes=True)
-                out.write(frame_with_boxes)
-                box_lines = [f"{name}, {x},{y},{w},{h}" for (name, x, y, w, h) in boxes]
-                f.write(f"Frame {frame_index}: {len(boxes)} detections\n")
-                for line in box_lines:
-                    f.write(f"{line}\n")
-                frame_index += 1
-
-        self.cap.release()
-        out.release()
-
-        self.cap = cv2.VideoCapture(self.output_video_path)
-        self.slider.setMaximum(self.frame_count - 1)
-        self.slider.setEnabled(True)
-
-        self.current_frame_pos = 0
-        self.timer.start(1000 // self.fps)
+    def on_processing_finished(self):
+        self.progress.setValue(100)
         self.play_pause_button.setText("Pause")
-
-    def display_random_card(self):
-        card_path = detector.get_random_card_image_path("./cards")
-        if card_path:
-            pixmap = QPixmap(card_path).scaled(self.detail_label.size(), Qt.KeepAspectRatio)
-            self.detail_label.setPixmap(pixmap)
 
     def next_frame(self):
         if self.cap is None:
@@ -189,33 +246,85 @@ class MainWindow(QMainWindow):
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
             self.current_frame_pos = pos
 
-    def on_frame_clicked(self, point):
-        if not hasattr(self, 'detection_results') or self.cap is None:
+    def display_random_card(self):
+        card_path = detector.get_random_card_image_path("./cards")
+        if card_path:
+            pixmap = QPixmap(card_path).scaled(self.detail_label.size(), Qt.KeepAspectRatio)
+            self.detail_label.setPixmap(pixmap)
+   
+    def detect_on_image(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Images (*.png *.jpg *.jpeg *.bmp)")
+        if not file_path:
             return
 
-        # Obtenha dimensões reais do vídeo
-        video_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        video_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        img = cv2.imread(file_path)
+        if img is None:
+            self.video_label.setText("Failed to load image.")
+            return
 
-        # Dimensões da QLabel
-        label_width = self.video_label.width()
-        label_height = self.video_label.height()
+        frame_with_boxes, boxes = detector.detect_on_frame(img, return_boxes=True)
 
-        # Redimensionar o ponto clicado
-        scale_x = video_width / label_width
-        scale_y = video_height / label_height
+        # Store detections for click interaction
+        self.static_image_mode = True
+        self.static_detections = [(int(name), x, y, w, h) for (name, x, y, w, h) in boxes]
 
-        scaled_point = QPoint(int(point.x() * scale_x), int(point.y() * scale_y))
+        # Convert to QImage and show
+        rgb = cv2.cvtColor(frame_with_boxes, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        q_img = QImage(rgb.data, w, h, ch * w, QImage.Format_RGB888)
+        self.video_label.setPixmap(QPixmap.fromImage(q_img))
 
-        boxes = self.detection_results.get(self.current_frame_pos, [])
-        for (name, x, y, w, h) in boxes:
-            rect = QRect(x, y, w, h)
-            if rect.contains(scaled_point):
-                print('inside rect', name, rect, scaled_point)
-                self.display_random_card()
+    def on_frame_clicked(self, point):
+        if self.static_image_mode:
+            # Click on static image with detections
+            pixmap = self.video_label.pixmap()
+            if not pixmap:
                 return
+            label_width = self.video_label.width()
+            label_height = self.video_label.height()
+            img_width = pixmap.width()
+            img_height = pixmap.height()
+
+            scale_x = img_width / label_width
+            scale_y = img_height / label_height
+            scaled_point = QPoint(int(point.x() * scale_x), int(point.y() * scale_y))
+
+            for (idx, x, y, w, h) in self.static_detections:
+                rect = QRect(x, y, w, h)
+                if rect.contains(scaled_point):
+                    self.load_card_by_index(idx)
+                    return
+
+        elif hasattr(self, 'detection_results') and self.cap:
+            video_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            video_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+            label_width = self.video_label.width()
+            label_height = self.video_label.height()
+
+            scale_x = video_width / label_width
+            scale_y = video_height / label_height
+
+            scaled_point = QPoint(int(point.x() * scale_x), int(point.y() * scale_y))
+
+            boxes = self.detection_results.get(self.current_frame_pos, [])
+            for (name, x, y, w, h) in boxes:
+                rect = QRect(x, y, w, h)
+                if rect.contains(scaled_point):
+                    try:
+                        idx = int(name)
+                        self.load_card_by_index(idx)
+                    except ValueError:
+                        print(f"Invalid index: {name}")
+                    return
+
+    def load_card_by_index(self, idx):
+        card_path = f"./cards/sv1-{idx+1}/sv1-{idx+1}.png"
+        if os.path.exists(card_path):
+            pixmap = QPixmap(card_path).scaled(self.detail_label.size(), Qt.KeepAspectRatio)
+            self.detail_label.setPixmap(pixmap)
         else:
-            print('outside rect', name, rect, scaled_point)
+            self.detail_label.setText(f"Card image not found for index {idx}")
 
 
 class ClickableLabel(QLabel):
