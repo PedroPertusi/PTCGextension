@@ -8,3 +8,4 @@
 cards.zip
 *.zip
 predict
+executable/__pycache__
