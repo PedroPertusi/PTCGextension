@@ -93,6 +93,10 @@ This sub-section will list all attempts made and how they evolved from previous 
 
 The first version of the model had it's synthetic dataset created using 10 versions of each card, the base card and 9 augmented versions (brightness, noise, resolution, but no rotation) pasted on one empty table image.
 
+If you have used the ```data_scripts/dataset.ipynb``` notebook to create the directory with all cards, you can use the ```data_scripts/augmentation.py``` script to create these augmented versions on your local workspace.
+
+Having these augmented cards, you can create a synthetic dataset using the ```data_scripts/synthetic_dataset.ipynb``` notebook. Read the code to understand how to insert more collections and how to alter the amount of times a card appears in the synthetic dataset.
+
 The empty table looks like:
 
 ![empty_table](assets/empty_table.png)
