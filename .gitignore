@@ -1,7 +1,6 @@
 /env
 .env
 /.env
-/cards
 .DS_Store
 /outputs
 /data
