@@ -198,7 +198,7 @@ This app uses a YOLOv8 model (`my_model/best.pt`) to detect Pokémon cards in vi
 Install dependencies via:
 
 ```bash
-pip install -r requirements.txt
+pip install -r "executable/requirements.txt"
 ```
 
 Minimal requirements:
@@ -214,7 +214,7 @@ Minimal requirements:
 ### How to Run
 
 ```bash
-python main.py
+python "executable/main.py"
 ```
 
 ---
@@ -258,6 +258,7 @@ This is shown when the user clicks on a detected card.
 - Output videos with bounding boxes are saved in `results/output_N.mp4`
 - YOLOv8 model should be placed in `my_model/best.pt`
 - If no matching card image is found, a fallback message is shown
+- A few test videos can be found in `preview_videos`.
 
 ---
 
