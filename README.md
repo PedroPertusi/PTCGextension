@@ -17,11 +17,11 @@ This README describes all attempts and results from the development of this proj
 
 ## Data
 
-The data used for this project was a collection of high definition pokémon cards sourced from a web-avaiable [Pokémon card API](https://docs.pokemontcg.io/).
+The data used for this project was a collection of high definition pokémon cards sourced from a web-available [Pokémon card API](https://docs.pokemontcg.io/).
 
 ![card_example](assets/card_example.png)
 
-At first, we decided to use all of the collections currently (as of April/2025) playing, this means all collections a player can use in a regular Pokémon TCG tournament. This consists of 3040 cards, being part of the following collections (To see more about collection details, go to the [Pokémon card API docs](https://docs.pokemontcg.io/)):
+At first, we decided to use all of the collections currently playing (as of April/2025). In other words, all collections a player can use in a regular Pokémon TCG tournament. This set consists of 3040 cards, being part of the following collections (To see more about collection details, go to the [Pokémon card API docs](https://docs.pokemontcg.io/)):
 
     - SV1
     - SV2
@@ -38,36 +38,37 @@ At first, we decided to use all of the collections currently (as of April/2025) 
     - SV9
     - SVP
 
-These cards can be obtained using the ```dataset.ipynb``` script inside the ```data_scripts/``` directory, which will create a ```cards/``` directory, with a directory for each card inside, containing the card's image inside:
+These cards can be obtained using the ```dataset.ipynb``` script inside the ```data_scripts/``` directory, which will create a ```cards/``` directory, with a directory for each card inside, containing the card's image:
 ```
 cards/
 └── sv1-1/
     └── sv1-1.png
 ```
 
-More information about the **training data** can be found in the **Model Training** section, linked to each specific attempt.
+More information about the **training data** can be found in the following **Model Training** section, linked to each specific attempt.
 
 ## Model Training
 
-This project tested training multiple models using both different approaches and different data. This next section will detail all attempts at training models, their objectives and results. All models were trained using YOLOv8 and the **ultralytics**.
+This project tested training multiple models using different approaches and data. This section will detail all attempts at training models, their goals, and results. All models were trained using YOLOv8 and the **ultralytics** library.
 
 ### Separate Object Detection and Classification Model
 
-The first attempt made to have the desired result of classifying Pokémon cards on an image was to use an object detection model that would detect the pokémon cards and then send the cropped sections of the bigger image to an image classifier, that would classify the crop based on all the classes.
+The first attempt made to achieve the desired result of classifying Pokémon cards on a frame was to use an object detection model that would detect the pokémon cards and then send the cropped sections to an image classifier, which would classify it as one of the classes.
 
-The object detection was very simple to train and to obtain good results. We captured about 50 images of matches, and then trained the model with them, and obtained a very good accuracy:
+The object detection was very simple to train and to obtain good results. We captured and used for training about 50 images of matches, obtaining a very good accuracy:
 
 ![object_detection_example](assets/object_detection_example.jpg)
 
-But for the classification model, things weren't so simple. Because of the data avaiability limitations, meaning it would be impossible to obtain images of all 3040 cards in play, not just because it would be very time consuming, but also because most cards don't see play, with just some cards being truly competitive, we decided to train our model **with the cards obtained via API**, but with a lot of data augmentation.
+However, the classification model wasn't so simple. Due to the data avaiability limitation (it would be impossible to obtain images of all 3040 cards in play, not just because it would be very time consuming, but also because most cards are not competitive), we decided to train our model **with the cards obtained via API**, applying different data augmentation.
 
-To make that possible, for each card, we created 20-30 augmented versions, ranging from:
-- Brigthness (dark and bright versions)
+To make that possible, for each card, we created 20-30 augmented versions, utilizing one of the following per version:
+
+- Brigthness (darker and brighter versions)
 
 ![bright_example](assets/bright_example.jpg)
 ![dark_example](assets/dark_example.jpg)
 
-- Resolution
+- Lower Resolution
 
 ![resolution_example](assets/resolution_example.jpg)
 
@@ -79,19 +80,19 @@ To make that possible, for each card, we created 20-30 augmented versions, rangi
 
 ![rotation_example](assets/rotation_example.jpg)
 
-Testing the models with more images captured from matches, however, we discovered our model combination was not very successful, with and average accuracy of 40% across all pictures used. This accuracy, however, made us optimistic to try the other promising approach we had thought of: An Object Detection and Classification model, trained using **a syntetic dataset**. 
+After testing the models with more images captured from matches, we concluded our model combination was not successful, obtaining an average accuracy of 40% across all pictures used. However, this number made us optimistic to try the other promising approach we had thought of: a single Object Detection and Classification model, trained using **a synthetic dataset**. 
 
 ### Object Detection and Classification Model\
 
-The 40% accuracy on our baseline model with 3040 classes made us optimistic about creating this model, given that it would have way more data and time to train.
+The 40% accuracy on our baseline model with 3040 classes drove us optimistic about developing this model, given it would have way more data.
 
-Given that we had all cards, knew their classes and had table images, the idea was to create a synthetic dataset of table images and labels, and then train an Object Detection and Classification model using this synthetic dataset.
+Given that we had all cards, knew their classes, and had table images, we aimed to create a synthetic dataset of table images and labels, and then train an Object Detection and Classification model using this synthetic dataset.
 
-This sub-section will list all attempts made and how they evolved from previous attempts.
+This sub-section will list all attempts and how they evolved from previous ones.
 
 #### First Version - All Classes
 
-The first version of the model had it's synthetic dataset created using 10 versions of each card, the base card and 9 augmented versions (brightness, noise, resolution, but no rotation) pasted on one empty table image.
+The first version of the model had it's synthetic dataset created using 10 versions of each card, the base card and 9 augmented versions (brightness, noise, resolution, but no rotation, given the cards are always rotated in the table) pasted on one empty table image.
 
 If you have used the ```data_scripts/dataset.ipynb``` notebook to create the directory with all cards, you can use the ```data_scripts/augmentation.py``` script to create these augmented versions on your local workspace.
 
@@ -131,15 +132,15 @@ The difference between the two position types was that, for the first version, w
 
 #### First Version - Results
 
-The first version yielded disappointing results - not only the models took very long to train, none of them had an even remotely good accuracy, and many times during training our computers failed and we had to restart from where the training stopped. All of the models had a very low confidence level in their predictions, and even the predicted classes were wrong.
+The first version yielded disappointing results - not only the models took very long to train, but also none of them had an even remotely good accuracy. Furthermore, lack of more potent hardware was also a problem. Often times during training our computers failed and we had to restart from where the training stopped. All of the models had a very low confidence level in their predictions, and the predicted classes were frequently wrong.
 
-An intuitive next step would be to create even more data for training, but it was impossible, with our setups, to train these models with even more data, because of computational power limitations, and that led to the second version of the model: **Training with only one collection**
+An intuitive next step would be to create even more data for training. However, with our setups, it was impossible to train these models with even more data, due to the computational power limitations. This led to the second version of the model: **Training with only one collection**
 
 #### Second Version - Only the SV base set (SV1)
 
-The Second Version of our model aimed to reduce our scope: Train using only one collection, and observe the results of less data. We decided to train the model using the base set of Scarlet and Violet, the current playing set of collections, and observe how the model would behave.
+The Second Version of our model aimed to reduce our scope: train using only one collection, and observe the results with less classes. We decided to train the model using the base set of Scarlet and Violet, the current playing set of collections, and observe how the model would behave.
 
-We also made several changes between this version's attempts, due to it's shorter training time (20h approx.) guessing what could improve the model.
+We also made several changes between this version's attempts, due to it's shorter training time (20h approx.) trying to improve the model.
 
 | Model  | # of Classes | Versions per Card | Card Usage per Image | Positions                            | Cards per Image | Different Backgrounds |
 | ------ | ------------ | ----------------- | -------------------- | ------------------------------------ | --------------- | ------------- |
@@ -148,28 +149,28 @@ We also made several changes between this version's attempts, due to it's shorte
 | YOLOv8 | 258          | 10                | Each version used 3x | Random (restricted to play area) | 3 to 15         | Images use 1 of 6 different table backgrounds with varying stream UI layouts |
 | YOLOv8 | 258          | 10                | Each version used 3x | Random (restricted to play area) | 3 to 15         | Images use a completely white background |
 
-The first attempt followed the same exact approach as the last failed attempt with all classes, but uses only the first collection. This model yielded more confidence, but the predictions still were not accurate, and the results, disappointing still. As you can see on the following image, the confidence level was low, and the cards predicted are almost all wrong.
+The first attempt followed the same exact approach as the last failed attempt with all classes, but uses only the first collection. This model yielded more confidence, but the predictions still were not accurate. As seen on the following image, the confidence level was low, and the cards predicted are almost all wrong.
 
 ![prediction_example5](assets/prediction_example5.jpg)
 
-The second attempt significantly improved the confidence level of the model, due to the increase in data: We used 3 of each version of the cards in the construction of the synthetic dataset, that means 30 times each card on the collection. We also restricted the cards to be pasted only on the playing area, instead of all around the image. Still, the predictions aren't correct.
+The second attempt significantly improved the confidence level of the model, due to the increase in data: we placed each version of the cards 3 times in the construction of the synthetic dataset, which means 30 times each card on the collection. We also restricted the cards to be pasted only on the playing area, instead of all around the image. Still, the predictions aren't correct.
 
-This image has a bunch of noise (the minimum confidence level for the prediction was very low), but it is possible to see that the model has a high confidence level on at least some cards:
+This image has a bunch of noise (the minimum confidence level for the prediction was very low), but it is possible to see that the model has a high confidence level on at least some cards (even though they are wrong):
 
 ![prediction_example5](assets/prediction_example1.jpg)
 
 The third attempt was made to see if the background was influencing the predictions of the model. We obtained more images of clear tables, to use as a variant background for the model. Not much changed from the second attempt, however.
 
-Finally, the fourth and final attempt was made to see if this problem was viable at all: We simply used a completely white background, and used synthetic images to test it's accuracy. It was no surprise that this model had a very high accuracy, but it does not work on a real life setting.
+Finally, the fourth and final attempt was made to see if this problem was viable at all: we utilized a completely white background. Due to the different background, we also had to use the synthetic images to test the model's accuracy. It was no surprise that this model had a very high accuracy now that the testing images are similar to the training ones, but it does not work on a real life setting.
 
 ![prediction_example5](assets/prediction_example2.jpg)
 
 ### Future Work
 
-Unfortunately, all of our attempts failed at solving the problem. For that reason, we decided to list what would be our next steps in continuing this problem, to try improving the models we trained:
+Unfortunately, all of our attempts failed at solving the problem consistently. For that reason, we decided to list what would be our next steps in continuing this problem, to try improving the models we trained:
 
-- More Computacional Power: Having a more powerful computer to train the models would allow heavier training sessions (bigger batch sizes), more epochs and more data to be used for each training.
-- Better Data: Creating an even more realistic synthetic dataset, mirroring the appearence of cards in real life, would improve the performance of the model in real table images, given that, even with data augmentation, ou synthetic images clearly aren't as realistic as is optimal. Another option is to use real data to train the model, which would be way more difficult.
+- More Computational Power: Having a more powerful hardware to train the models would allow heavier training sessions (bigger batch sizes), more epochs and more data to be used for each training.
+- Better Data: Creating an even more realistic synthetic dataset, mirroring the appearence of cards in real life, could improve the performance of the model in real table images, given that, even with data augmentation, our synthetic images clearly aren't as realistic. Another option is to use real data to train the model, which would pose a tough challenge of having to manually label frames of games (added to the problem that most cards are not competitive).
 
 
 ## YOLO Card Detector
@@ -180,7 +181,7 @@ A desktop application that detects and displays Pokémon TCG cards in videos and
 
 - Detect cards in videos and export detection results
 - Detect cards in static images
-- Click on a detected card to zoom into its detail
+- The user can click on a detected card to zoom into its detail
 - View previously processed videos and navigate frame-by-frame
 - Automatically hides UI overlay to avoid interfering with screen captures
 
@@ -200,7 +201,7 @@ Install dependencies via:
 pip install -r requirements.txt
 ```
 
-Minimal requirements (not exhaustive):
+Minimal requirements:
 - Python 3.8+
 - PyQt5
 - OpenCV
@@ -257,13 +258,6 @@ This is shown when the user clicks on a detected card.
 - Output videos with bounding boxes are saved in `results/output_N.mp4`
 - YOLOv8 model should be placed in `my_model/best.pt`
 - If no matching card image is found, a fallback message is shown
-
----
-
-### Additional Tools
-
-- `screen_capture.py`: Optionally captures real-time frames (not part of main GUI)
-- `select_region.py`: Fullscreen mouse-drag region selector (currently unused in GUI)
 
 ---
 
